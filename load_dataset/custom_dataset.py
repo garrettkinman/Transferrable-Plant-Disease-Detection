@@ -1,6 +1,9 @@
 import os
+import pandas as pd
 import torch
 from torch.utils.data import Dataset
+import torchvision.io as io
+import torchvision.transforms as T
 
 # TODO: adapt this to the dataset
 class HealthyLeafDataset(Dataset):
@@ -11,15 +14,19 @@ class HealthyLeafDataset(Dataset):
                                 'val' to specify the validation set
                                 'test' to specify the test set"""
         self.setname = setname
-        assert setname in ['train','val','test']
+        assert setname in ['train','test']
         
         # define dataset
-        overall_dataset_dir = os.path.join(os.path.join(os.getcwd(),'load_dataset'), 'tiny_data')
-        self.selected_dataset_dir = os.path.join(overall_dataset_dir,setname)
+        overall_dataset_dir = os.path.join(os.path.join(os.getcwd(),'load_dataset'), 'dataset')
+        self.selected_dataset_dir = os.path.join(overall_dataset_dir, setname)
         
-        # e.g., self.all_filenames = ['006.png','007.png','008.png'] when setname=='val'
+        # e.g., self.all_filenames = ['img0.jpg','img1.jpg','img2.jpg']
         self.all_filenames = os.listdir(self.selected_dataset_dir)
-        self.all_labels = pd.read_csv(os.path.join(overall_dataset_dir,'tiny_labels.csv'),header=0,index_col=0)
+
+        if setname == 'train':
+            self.all_labels = pd.read_csv(os.path.join(overall_dataset_dir,'train_labels.csv'), header=0, index_col=0)
+        elif setname == 'test':
+            self.all_labels = pd.read_csv(os.path.join(overall_dataset_dir,'test_labels.csv'), header=0, index_col=0)
         self.label_meanings = self.all_labels.columns.values.tolist()
     
     def __len__(self):
@@ -33,15 +40,16 @@ class HealthyLeafDataset(Dataset):
         'data' (value: Tensor for an RGB image) and 'label' (value: multi-hot
         vector as Torch tensor of gr truth class labels)."""
         selected_filename = self.all_filenames[idx]
-        imagepil = PIL.Image.open(os.path.join(self.selected_dataset_dir,selected_filename)).convert('RGB')
+        img = io.read_image(os.path.join(self.selected_dataset_dir, selected_filename), mode=io.ImageReadMode.RGB)
         
-        #convert image to Tensor and normalize
-        image = utils.to_tensor_and_normalize(imagepil)
+        # normalize image to ImageNet mean and std dev (TODO: might change depending on whether using ImageNet model or not)
+        normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) # required for ImageNet
+        img = normalize(img)
         
-        #load label
+        # load label
         label = torch.Tensor(self.all_labels.loc[selected_filename,:].values)
         
-        sample = {'data':image, #preprocessed image, for input into NN
+        sample = {'data':img, #preprocessed image, for input into NN
                   'label':label,
                   'img_idx':idx}
         return sample
